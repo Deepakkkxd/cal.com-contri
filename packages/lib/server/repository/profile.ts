@@ -347,7 +347,11 @@ export class ProfileRepository {
         user: {
           select: userSelect,
         },
-        movedFromUser: true,
+        movedFromUser: {
+          select: {
+            id: true,
+          },
+        },
         organization: {
           include: {
             organizationSettings: {

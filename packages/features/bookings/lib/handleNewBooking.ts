@@ -207,6 +207,7 @@ export const getEventTypesFromDB = async (eventTypeId: number) => {
       assignAllTeamMembers: true,
       parentId: true,
       useEventTypeDestinationCalendarEmail: true,
+      differentRoundRobinRecurringHosts: true,
       owner: {
         select: {
           hideBranding: true,
@@ -1223,7 +1224,11 @@ async function handler(
       }
     }
 
-    if (!req.body.allRecurringDates || req.body.isFirstRecurringSlot) {
+    if (
+      !req.body.allRecurringDates ||
+      req.body.isFirstRecurringSlot ||
+      eventType.differentRoundRobinRecurringHosts
+    ) {
       const availableUsers = await ensureAvailableUsers(
         eventTypeWithUsers,
         {
@@ -1257,7 +1262,11 @@ async function handler(
         if (!newLuckyUser) {
           break; // prevent infinite loop
         }
-        if (req.body.isFirstRecurringSlot && eventType.schedulingType === SchedulingType.ROUND_ROBIN) {
+        if (
+          req.body.isFirstRecurringSlot &&
+          eventType.schedulingType === SchedulingType.ROUND_ROBIN &&
+          !eventType.differentRoundRobinRecurringHosts
+        ) {
           // for recurring round robin events check if lucky user is available for next slots
           try {
             for (
@@ -1501,6 +1510,7 @@ async function handler(
     seatsPerTimeSlot: eventType.seatsPerTimeSlot,
     seatsShowAvailabilityCount: eventType.seatsPerTimeSlot ? eventType.seatsShowAvailabilityCount : true,
     schedulingType: eventType.schedulingType,
+    differentRoundRobinRecurringHosts: eventType.differentRoundRobinRecurringHosts,
     iCalUID,
     iCalSequence,
   };
@@ -2078,6 +2088,16 @@ async function handler(
           })
         );
 
+        if (
+          // Send only one email to attendee
+          eventType.schedulingType === SchedulingType.ROUND_ROBIN &&
+          eventType.differentRoundRobinRecurringHosts &&
+          req.body.currentRecurringIndex > 0
+        ) {
+          isAttendeeConfirmationEmailDisabled = true;
+        }
+
+        console.log("sending emails");
         await sendScheduledEmails(
           {
             ...evt,

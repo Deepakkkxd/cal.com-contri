@@ -1239,6 +1239,7 @@
   "add_exchange2016": "Connect Exchange 2016 Server",
   "custom_template": "Custom template",
   "email_body": "Email body",
+  "members_of_team": "Members of {{teamName}}",
   "text_message": "Text message",
   "specific_issue": "Have a specific issue?",
   "browse_our_docs": "browse our docs",
@@ -2362,5 +2363,6 @@
   "lock_org_users_eventtypes_description": "Prevent members from creating their own event types.",
   "cookie_consent_checkbox": "I consent to our privacy policy and cookie usage",
   "make_a_call": "Make a Call",
+  "recurring_round_robin_description": "Assign different round-robin hosts for every recurring instance",
   "ADD_NEW_STRINGS_ABOVE_THIS_LINE_TO_PREVENT_MERGE_CONFLICTS": "↑↑↑↑↑↑↑↑↑↑↑↑↑ Add your new strings above here ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑"
 }

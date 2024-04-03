@@ -259,6 +259,7 @@ const EventTypePage = (props: EventTypeSetupProps) => {
         yourPhoneNumber: eventType.aiPhoneCallConfig?.yourPhoneNumber,
         numberToCall: eventType.aiPhoneCallConfig?.numberToCall,
       },
+      differentRoundRobinRecurringHosts: eventType.differentRoundRobinRecurringHosts,
     };
   }, [eventType, periodDates, metadata]);
   const formMethods = useForm<FormValues>({

@@ -17,7 +17,7 @@ import getPaymentAppData from "@calcom/lib/getPaymentAppData";
 import { useBookerUrl } from "@calcom/lib/hooks/useBookerUrl";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import { getEveryFreqFor } from "@calcom/lib/recurringStrings";
-import { BookingStatus } from "@calcom/prisma/enums";
+import { BookingStatus, SchedulingType } from "@calcom/prisma/enums";
 import { bookingMetadataSchema } from "@calcom/prisma/zod-utils";
 import type { RouterInputs, RouterOutputs } from "@calcom/trpc/react";
 import { trpc } from "@calcom/trpc/react";
@@ -35,10 +35,21 @@ import {
   TextAreaField,
   Tooltip,
 } from "@calcom/ui";
-import { Ban, Check, Clock, CreditCard, MapPin, RefreshCcw, Send, X } from "@calcom/ui/components/icon";
+import {
+  Ban,
+  Check,
+  Clock,
+  CreditCard,
+  MapPin,
+  RefreshCcw,
+  Send,
+  X,
+  Users,
+} from "@calcom/ui/components/icon";
 
 import { ChargeCardDialog } from "@components/dialog/ChargeCardDialog";
 import { EditLocationDialog } from "@components/dialog/EditLocationDialog";
+import { ReassignDialog } from "@components/dialog/ReassignDialog";
 import { RescheduleDialog } from "@components/dialog/RescheduleDialog";
 
 type BookingListingStatus = RouterInputs["viewer"]["bookings"]["get"]["filters"]["status"];
@@ -48,6 +59,7 @@ type BookingItem = RouterOutputs["viewer"]["bookings"]["get"]["bookings"][number
 type BookingItemProps = BookingItem & {
   listingStatus: BookingListingStatus;
   recurringInfo: RouterOutputs["viewer"]["bookings"]["get"]["recurringInfo"][number] | undefined;
+  isOrgAdminOrOwner: boolean;
   loggedInUser: {
     userId: number | undefined;
     userTimeZone: string | undefined;
@@ -59,6 +71,7 @@ type BookingItemProps = BookingItem & {
 function BookingListItem(booking: BookingItemProps) {
   const bookerUrl = useBookerUrl();
   const { userId, userTimeZone, userTimeFormat, userEmail } = booking.loggedInUser;
+  const { isOrgAdminOrOwner } = booking;
 
   const {
     t,
@@ -159,6 +172,58 @@ function BookingListItem(booking: BookingItemProps) {
       : []),
   ];
 
+  const editBookingActions: ActionType[] = [
+    {
+      id: "reschedule",
+      icon: Clock,
+      label: t("reschedule_booking"),
+      href: `${bookerUrl}/reschedule/${booking.uid}${
+        booking.seatsReferences.length ? `?seatReferenceUid=${getSeatReferenceUid()}` : ""
+      }`,
+    },
+    {
+      id: "reschedule_request",
+      icon: Send,
+      iconClassName: "rotate-45 w-[16px] -translate-x-0.5 ",
+      label: t("send_reschedule_request"),
+      onClick: () => {
+        setIsOpenRescheduleDialog(true);
+      },
+    },
+    {
+      id: "change_location",
+      label: t("edit_location"),
+      onClick: () => {
+        setIsOpenLocationDialog(true);
+      },
+      icon: MapPin,
+    },
+  ];
+
+  if (booking.eventType.schedulingType === SchedulingType.ROUND_ROBIN) {
+    const isUserAttendingRREvent =
+      booking.user.id === booking.loggedInUser.userId ||
+      booking.attendees.some((attendee) => attendee.email === booking.loggedInUser.userEmail);
+
+    const isAdminOrOwner =
+      isOrgAdminOrOwner ||
+      !!booking.eventType.team.members.find(
+        (member) => userId === member.userId && (member.role === "ADMIN" || member.role === "OWNER")
+      );
+
+    //only add for team admin or owner
+    if (isUserAttendingRREvent || isAdminOrOwner) {
+      editBookingActions.push({
+        id: "reassign ",
+        label: t("reassign"),
+        onClick: () => {
+          setIsOpenReassignDialog(true);
+        },
+        icon: Users,
+      });
+    }
+  }
+
   let bookedActions: ActionType[] = [
     {
       id: "cancel",
@@ -174,33 +239,7 @@ function BookingListItem(booking: BookingItemProps) {
     {
       id: "edit_booking",
       label: t("edit"),
-      actions: [
-        {
-          id: "reschedule",
-          icon: Clock,
-          label: t("reschedule_booking"),
-          href: `${bookerUrl}/reschedule/${booking.uid}${
-            booking.seatsReferences.length ? `?seatReferenceUid=${getSeatReferenceUid()}` : ""
-          }`,
-        },
-        {
-          id: "reschedule_request",
-          icon: Send,
-          iconClassName: "rotate-45 w-[16px] -translate-x-0.5 ",
-          label: t("send_reschedule_request"),
-          onClick: () => {
-            setIsOpenRescheduleDialog(true);
-          },
-        },
-        {
-          id: "change_location",
-          label: t("edit_location"),
-          onClick: () => {
-            setIsOpenLocationDialog(true);
-          },
-          icon: MapPin,
-        },
-      ],
+      actions: editBookingActions,
     },
   ];
 
@@ -237,6 +276,7 @@ function BookingListItem(booking: BookingItemProps) {
     .locale(language)
     .format(isUpcoming ? "ddd, D MMM" : "D MMMM YYYY");
   const [isOpenRescheduleDialog, setIsOpenRescheduleDialog] = useState(false);
+  const [isOpenReassignDialog, setIsOpenReassignDialog] = useState(false);
   const [isOpenSetLocationDialog, setIsOpenLocationDialog] = useState(false);
   const setLocationMutation = trpc.viewer.bookings.editLocation.useMutation({
     onSuccess: () => {
@@ -312,6 +352,19 @@ function BookingListItem(booking: BookingItemProps) {
         isOpenDialog={isOpenSetLocationDialog}
         setShowLocationModal={setIsOpenLocationDialog}
         teamId={booking.eventType?.team?.id}
+      />
+      <ReassignDialog
+        isOpenDialog={isOpenReassignDialog}
+        setIsOpenDialog={setIsOpenReassignDialog}
+        hosts={booking.eventType?.hosts}
+        assignedHosts={
+          booking.user
+            ? [booking.user.email || ""].concat(booking.attendees.map((attendee) => attendee.email))
+            : []
+        }
+        eventTypeId={booking.eventType?.id}
+        teamId={booking.eventType?.team?.id}
+        bookingId={booking.id}
       />
       {booking.paid && booking.payment[0] && (
         <ChargeCardDialog

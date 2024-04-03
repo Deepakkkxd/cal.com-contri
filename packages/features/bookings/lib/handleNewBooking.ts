@@ -1504,7 +1504,6 @@ async function handler(
     iCalUID,
     iCalSequence,
   };
-
   if (req.body.thirdPartyRecurringEventId) {
     evt.existingRecurringEvent = {
       recurringEventId: req.body.thirdPartyRecurringEventId,

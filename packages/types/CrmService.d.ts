@@ -17,6 +17,8 @@ export interface ContactCreateInput {
 export interface Contact {
   id: string;
   email: string;
+  ownerId?: string;
+  ownerEmail?: string;
 }
 
 export interface CrmEvent {
@@ -27,6 +29,6 @@ export interface CRM {
   createEvent: (event: CalendarEvent, contacts: Contact[]) => Promise<CrmEvent>;
   updateEvent: (uid: string, event: CalendarEvent) => Promise<CrmEvent>;
   deleteEvent: (uid: string) => Promise<void>;
-  getContacts: (emails: string | string[]) => Promise<Contact[]>;
-  createContacts: (contactsToCreate: ContactCreateInput[]) => Promise<Contact[]>;
+  getContacts: (emails: string | string[], includeOwner?: boolean) => Promise<Contact[]>;
+  createContacts: (contactsToCreate: ContactCreateInput[], organizerEmail?: string) => Promise<Contact[]>;
 }

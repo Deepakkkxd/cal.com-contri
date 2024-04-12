@@ -1245,6 +1245,13 @@ async function handler(
           luckyUserPool: luckyUserPool.map((user) => user.id),
         })
       );
+
+      if (reqBody.teamMemberEmail) {
+        const teamMember = eventTypeWithUsers.users.find((user) => user.email === reqBody.teamMemberEmail);
+        if (teamMember) {
+          luckyUsers.push(teamMember);
+        }
+      }
       // loop through all non-fixed hosts and get the lucky users
       while (luckyUserPool.length > 0 && luckyUsers.length < 1 /* TODO: Add variable */) {
         const newLuckyUser = await getLuckyUser("MAXIMIZE_AVAILABILITY", {
@@ -1298,7 +1305,10 @@ async function handler(
         throw new Error(ErrorCode.HostsUnavailableForBooking);
       }
       // Pushing fixed user before the luckyUser guarantees the (first) fixed user as the organizer.
-      users = [...availableUsers.filter((user) => user.isFixed), ...luckyUsers];
+      users = [
+        ...availableUsers.filter((user) => user.isFixed && user.email !== reqBody.teamMemberEmail),
+        ...luckyUsers,
+      ];
       luckyUserResponse = { luckyUsers: luckyUsers.map((u) => u.id) };
     } else if (req.body.allRecurringDates && eventType.schedulingType === SchedulingType.ROUND_ROBIN) {
       // all recurring slots except the first one

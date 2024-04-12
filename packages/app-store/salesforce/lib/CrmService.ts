@@ -8,7 +8,7 @@ import { WEBAPP_URL } from "@calcom/lib/constants";
 import { HttpError } from "@calcom/lib/http-error";
 import logger from "@calcom/lib/logger";
 import { prisma } from "@calcom/prisma";
-import type { CalendarEvent, Person } from "@calcom/types/Calendar";
+import type { CalendarEvent } from "@calcom/types/Calendar";
 import type { CredentialPayload } from "@calcom/types/Credential";
 import type { CRM, Contact, CrmEvent } from "@calcom/types/CrmService";
 
@@ -84,7 +84,6 @@ export default class SalesforceCRMService implements CRM {
           refresh_token: credentialKey.refresh_token,
         }),
       });
-
       if (!response.ok) {
         const message = `${response.statusText}: ${JSON.stringify(await response.json())}`;
         throw new Error(message);
@@ -113,37 +112,14 @@ export default class SalesforceCRMService implements CRM {
     });
   };
 
-  private salesforceContactCreate = async (attendees: Person[]) => {
+  private getSalesforceUserFromEmail = async (email: string) => {
     const conn = await this.conn;
-    const createdContacts = await Promise.all(
-      attendees.map(async (attendee) => {
-        const [FirstName, LastName] = attendee.name ? attendee.name.split(" ") : [attendee.email, ""];
-        return await conn
-          .sobject("Contact")
-          .create({
-            FirstName,
-            ...(LastName ? { LastName } : {}),
-            Email: attendee.email,
-          })
-          .then((result) => {
-            if (result.success) {
-              return { Id: result.id, Email: attendee.email };
-            }
-          });
-      })
-    );
-    return createdContacts.filter(
-      (contact): contact is Omit<ContactSearchResult, "attributes"> => contact !== undefined
-    );
+    return await conn.query(`SELECT Id, Email FROM User WHERE Email = '${email}'`);
   };
 
-  private salesforceContactSearch = async (event: CalendarEvent) => {
+  private getSalesforceUserFromOwnerId = async (ownerId: string) => {
     const conn = await this.conn;
-    const search: ContactSearchResult[] = await conn.sobject("Contact").find(
-      event.attendees.map((att) => ({ Email: att.email })),
-      ["Id", "Email"]
-    );
-    return search;
+    return await conn.query(`SELECT Id, Email FROM User WHERE Id = '${ownerId}'`);
   };
 
   private getSalesforceEventBody = (event: CalendarEvent): string => {
@@ -276,11 +252,34 @@ export default class SalesforceCRMService implements CRM {
     }
   }
 
-  async getContacts(email: string | string[]) {
+  async getContacts(email: string | string[], includeOwner?: boolean) {
     const conn = await this.conn;
     const emails = Array.isArray(email) ? email : [email];
-    const soql = `SELECT Id, Email FROM Contact WHERE Email IN ('${emails.join("','")}')`;
+    // TODO get the user associated with the contact. Return the email
+    const soql = `SELECT Id, Email, OwnerId FROM Contact WHERE Email IN ('${emails.join("','")}')`;
     const results = await conn.query(soql);
+
+    if (!results || !results.records.length) return [];
+
+    if (includeOwner) {
+      const ownerIds = new Set();
+      results.records.forEach((record) => {
+        ownerIds.add(record.OwnerId);
+      });
+
+      const ownersQuery = await Promise.all(
+        Array.from(ownerIds).map(async (ownerId) => {
+          return this.getSalesforceUserFromOwnerId(ownerId);
+        })
+      );
+      const contactsWithOwners = results.records.map((record) => {
+        const ownerEmail = ownersQuery.find((user) => user.records[0].Id === record.OwnerId)?.records[0]
+          .Email;
+        return { id: record.Id, email: record.Email, ownerId: record.OwnerId, ownerEmail };
+      });
+      return contactsWithOwners;
+    }
+
     return results.records
       ? results.records.map((record) => ({
           id: record.Id,
@@ -289,8 +288,17 @@ export default class SalesforceCRMService implements CRM {
       : [];
   }
 
-  async createContacts(contactsToCreate: { email: string; name: string }[]) {
+  async createContacts(contactsToCreate: { email: string; name: string }[], organizerEmail?: string) {
     const conn = await this.conn;
+
+    // See if the organizer exists in the CRM
+    let organizerId: string;
+    if (organizerEmail) {
+      const userQuery = await this.getSalesforceUserFromEmail(organizerEmail);
+      if (userQuery) {
+        organizerId = (userQuery.records[0] as { Email: string; Id: string }).Id;
+      }
+    }
     const createdContacts = await Promise.all(
       contactsToCreate.map(async (attendee) => {
         const [FirstName, LastName] = attendee.name ? attendee.name.split(" ") : [attendee.email, ""];
@@ -300,6 +308,7 @@ export default class SalesforceCRMService implements CRM {
             FirstName,
             LastName: LastName || "-",
             Email: attendee.email,
+            ...(organizerId && { OwnerId: organizerId }),
           })
           .then((result) => {
             if (result.success) {

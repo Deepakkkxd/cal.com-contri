@@ -104,6 +104,7 @@ export async function getServerSession(options: {
       org: token.org,
       locale: user.locale ?? undefined,
       profile: user.profile,
+      homeView: user.homeView,
     },
     profileId: token.profileId,
     upId,

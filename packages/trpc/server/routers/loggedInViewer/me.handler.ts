@@ -85,6 +85,7 @@ export const meHandler = async ({ ctx, input }: MeOptions) => {
     locale: user.locale,
     timeFormat: user.timeFormat,
     timeZone: user.timeZone,
+    homeView: user.homeView,
     avatar: getUserAvatarUrl(user),
     avatarUrl: user.avatarUrl,
     createdDate: user.createdDate,

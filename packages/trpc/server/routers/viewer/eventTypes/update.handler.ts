@@ -68,6 +68,7 @@ export const updateHandler = async ({ ctx, input }: UpdateOptions) => {
   const eventType = await ctx.prisma.eventType.findUniqueOrThrow({
     where: { id },
     select: {
+      schedulingType: true,
       aiPhoneCallConfig: {
         select: {
           generalPrompt: true,
@@ -229,7 +230,7 @@ export const updateHandler = async ({ ctx, input }: UpdateOptions) => {
       (await ctx.prisma.membership.findMany({
         where: {
           teamId,
-          accepted: true,
+          accepted: eventType.schedulingType !== SchedulingType.ROUND_ROBIN ? true : undefined,
         },
       })) || [];
     const teamMemberIds = memberships.map((membership) => membership.userId);

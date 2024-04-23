@@ -31,6 +31,7 @@ import {
   TITLE_FIELD,
 } from "@calcom/features/bookings/lib/SystemField";
 import { APP_NAME } from "@calcom/lib/constants";
+import { BOOKED_WITH_SMS_EMAIL } from "@calcom/lib/constants";
 import {
   formatToLocalizedDate,
   formatToLocalizedTime,
@@ -352,6 +353,8 @@ export default function Success(props: PageProps) {
     eventType,
   };
 
+  const isEmailHidden = !!eventType?.bookingFields.find((field) => field.name === "email")?.hidden;
+
   return (
     <div className={isEmbed ? "" : "h-screen"} data-testid="success-page">
       {!isEmbed && !isFeedbackMode && (
@@ -531,7 +534,14 @@ export default function Success(props: PageProps) {
                                   {attendee.name && (
                                     <p data-testid={`attendee-name-${attendee.name}`}>{attendee.name}</p>
                                   )}
-                                  <p data-testid={`attendee-email-${attendee.email}`}>{attendee.email}</p>
+                                  {attendee.phoneNumber && (
+                                    <p data-testid={`attendee-phone-${attendee.phoneNumber}`}>
+                                      {attendee.phoneNumber}
+                                    </p>
+                                  )}
+                                  {attendee.email !== BOOKED_WITH_SMS_EMAIL && (
+                                    <p data-testid={`attendee-email-${attendee.email}`}>{attendee.email}</p>
+                                  )}
                                 </div>
                               ))}
                             </div>

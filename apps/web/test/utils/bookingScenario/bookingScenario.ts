@@ -1472,6 +1472,7 @@ export function getMockBookingReference(
 export function getMockBookingAttendee(
   attendee: Omit<Attendee, "bookingId"> & {
     bookingSeat?: AttendeeBookingSeatInput;
+    phoneNumber?: string | null;
   }
 ) {
   return {
@@ -1481,6 +1482,7 @@ export function getMockBookingAttendee(
     email: attendee.email,
     locale: attendee.locale,
     bookingSeat: attendee.bookingSeat || null,
+    phoneNumber: attendee.phoneNumber,
   };
 }
 

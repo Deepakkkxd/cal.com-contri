@@ -122,6 +122,7 @@ export type Invitee = {
   firstName: string;
   lastName: string;
   timeZone: string;
+  phoneNumber?: string;
   language: {
     translate: TFunction;
     locale: string;
@@ -534,6 +535,7 @@ export async function getBookingData<T extends z.ZodType>({
       calEventUserFieldsResponses: undefined,
       calEventResponses: undefined,
       customInputs: undefined,
+      attendeePhoneNumber: undefined,
     };
   }
   if (!reqBody.responses) {
@@ -550,6 +552,7 @@ export async function getBookingData<T extends z.ZodType>({
     ...reqBody,
     name: responses.name,
     email: responses.email,
+    attendeePhoneNumber: responses.attendeePhoneNumber,
     guests: responses.guests ? responses.guests : [],
     location: responses.location?.optionValue || responses.location?.value || "",
     smsReminderNumber: responses.smsReminderNumber,
@@ -628,6 +631,7 @@ async function createBooking({
       email: attendee.email,
       timeZone: attendee.timeZone,
       locale: attendee.language.locale,
+      phoneNumber: attendee.phoneNumber,
     };
   });
 
@@ -638,6 +642,7 @@ async function createBooking({
         name: member.name,
         timeZone: member.timeZone,
         locale: member.language.locale,
+        phoneNumber: member.phoneNumber,
       }))
     );
   }
@@ -952,6 +957,7 @@ async function handler(
     language,
     appsStatus: reqAppsStatus,
     name: bookerName,
+    attendeePhoneNumber: bookerPhoneNumber,
     email: bookerEmail,
     guests: reqGuests,
     location,
@@ -1374,6 +1380,7 @@ async function handler(
     {
       email: bookerEmail,
       name: fullName,
+      phoneNumber: bookerPhoneNumber,
       firstName: (typeof bookerName === "object" && bookerName.firstName) || "",
       lastName: (typeof bookerName === "object" && bookerName.lastName) || "",
       timeZone: attendeeTimezone,

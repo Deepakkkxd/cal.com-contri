@@ -4,7 +4,13 @@ import type { TFunction } from "next-i18next";
 
 import type { EventNameObjectType } from "@calcom/core/event";
 import { getEventName } from "@calcom/core/event";
+import dayjs from "@calcom/dayjs";
 import type BaseEmail from "@calcom/emails/templates/_base-email";
+import { getSenderId } from "@calcom/features/ee/workflows/lib/alphanumericSenderIdSupport.ts";
+import * as twilio from "@calcom/features/ee/workflows/lib/reminders/providers/twilioProvider.ts";
+import { SENDER_ID } from "@calcom/lib/constants";
+import { WEBAPP_URL } from "@calcom/lib/constants";
+import { TimeFormat } from "@calcom/lib/timeFormat";
 import { formatCalEvent } from "@calcom/lib/formatCalendarEvent";
 import type { CalendarEvent, Person } from "@calcom/types/Calendar";
 
@@ -70,6 +76,58 @@ const sendEmail = (prepare: () => BaseEmail) => {
   });
 };
 
+const sendSMS = ({
+  sendTo,
+  smsType,
+  attendee,
+  calEvent,
+}: {
+  sendTo: string;
+  smsType: "successfullyScheduled" | "successfullyReScheduled" | "attendeeDeclined";
+  attendee: Person;
+  calEvent: CalendarEvent;
+}) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const senderID = getSenderId(sendTo, SENDER_ID);
+
+      function getFormattedTime(time: string, format: string) {
+        return dayjs(time).tz(attendee.timeZone).locale(attendee.language.locale).format(format);
+      }
+
+      const SMS_MESSAGES = {
+        successfullyScheduled: `Hey ${attendee.name}, confirming your booking on  ${getFormattedTime(
+          calEvent.startTime,
+          `dddd, LL | ${TimeFormat.TWELVE_HOUR}`
+        )} - ${getFormattedTime(calEvent.endTime, TimeFormat.TWELVE_HOUR)} (${
+          attendee.timeZone
+        }) . \n\n You can view the booking details and add the event to your calendar from this url ${
+          calEvent.bookerUrl ?? WEBAPP_URL
+        }/booking/${calEvent.uid} `,
+
+        successfullyReScheduled: `Hey ${
+          attendee.name
+        }, your booking has been rescheduled to ${getFormattedTime(
+          calEvent.startTime,
+          `dddd, LL | ${TimeFormat.TWELVE_HOUR}`
+        )} - ${getFormattedTime(calEvent.endTime, TimeFormat.TWELVE_HOUR)} (${
+          attendee.timeZone
+        }) . \n\n You can view the booking details and add the event to your calendar from this url ${
+          calEvent.bookerUrl ?? WEBAPP_URL
+        }/booking/${calEvent.uid} `,
+
+        attendeeDeclined: `Hey ${attendee.name}, Your event request has been declined`,
+      };
+
+      const res = await twilio.sendSMS(sendTo, SMS_MESSAGES[smsType], senderID);
+
+      resolve(res);
+    } catch (e) {
+      reject(console.error(`twilio.sendSMS failed`, e));
+    }
+  });
+};
+
 export const sendScheduledEmails = async (
   calEvent: CalendarEvent,
   eventNameObject?: EventNameObjectType,
@@ -77,14 +135,14 @@ export const sendScheduledEmails = async (
   attendeeEmailDisabled?: boolean
 ) => {
   const formattedCalEvent = formatCalEvent(calEvent);
-  const emailsToSend: Promise<unknown>[] = [];
+  const emailsAndSmsToSend: Promise<unknown>[] = [];
 
   if (!hostEmailDisabled) {
-    emailsToSend.push(sendEmail(() => new OrganizerScheduledEmail({ calEvent: formattedCalEvent })));
+    emailsAndSmsToSend.push(sendEmail(() => new OrganizerScheduledEmail({ calEvent: formattedCalEvent })));
 
     if (formattedCalEvent.team) {
       for (const teamMember of formattedCalEvent.team.members) {
-        emailsToSend.push(
+        emailsAndSmsToSend.push(
           sendEmail(() => new OrganizerScheduledEmail({ calEvent: formattedCalEvent, teamMember }))
         );
       }
@@ -92,7 +150,7 @@ export const sendScheduledEmails = async (
   }
 
   if (!attendeeEmailDisabled) {
-    emailsToSend.push(
+    emailsAndSmsToSend.push(
       ...formattedCalEvent.attendees.map((attendee) => {
         return sendEmail(
           () =>
@@ -111,7 +169,17 @@ export const sendScheduledEmails = async (
     );
   }
 
-  await Promise.all(emailsToSend);
+  // Send Attendees SMS here
+  for (const attendee of calEvent.attendees) {
+    const attendeePhoneNumber = attendee.phoneNumber;
+    if (attendeePhoneNumber) {
+      emailsAndSmsToSend.push(
+        sendSMS({ sendTo: attendeePhoneNumber, smsType: "successfullyScheduled", attendee, calEvent })
+      );
+    }
+  }
+
+  await Promise.all(emailsAndSmsToSend);
 };
 
 // for rescheduled round robin booking that assigned new members
@@ -154,25 +222,34 @@ export const sendRoundRobinCancelledEmails = async (calEvent: CalendarEvent, mem
 
 export const sendRescheduledEmails = async (calEvent: CalendarEvent) => {
   const calendarEvent = formatCalEvent(calEvent);
-  const emailsToSend: Promise<unknown>[] = [];
+  const emailsAndSmsToSend: Promise<unknown>[] = [];
 
-  emailsToSend.push(sendEmail(() => new OrganizerRescheduledEmail({ calEvent: calendarEvent })));
+  emailsAndSmsToSend.push(sendEmail(() => new OrganizerRescheduledEmail({ calEvent: calendarEvent })));
 
   if (calendarEvent.team) {
     for (const teamMember of calendarEvent.team.members) {
-      emailsToSend.push(
+      emailsAndSmsToSend.push(
         sendEmail(() => new OrganizerRescheduledEmail({ calEvent: calendarEvent, teamMember }))
       );
     }
   }
 
-  emailsToSend.push(
+  emailsAndSmsToSend.push(
     ...calendarEvent.attendees.map((attendee) => {
       return sendEmail(() => new AttendeeRescheduledEmail(calendarEvent, attendee));
     })
   );
 
-  await Promise.all(emailsToSend);
+  for (const attendee of calEvent.attendees) {
+    const attendeePhoneNumber = attendee.phoneNumber;
+    if (attendeePhoneNumber) {
+      emailsAndSmsToSend.push(
+        sendSMS({ sendTo: attendeePhoneNumber, smsType: "successfullyReScheduled", attendee, calEvent })
+      );
+    }
+  }
+
+  await Promise.all(emailsAndSmsToSend);
 };
 
 export const sendRescheduledSeatEmail = async (calEvent: CalendarEvent, attendee: Person) => {
@@ -263,11 +340,20 @@ export const sendDeclinedEmails = async (calEvent: CalendarEvent) => {
   const calendarEvent = formatCalEvent(calEvent);
   const emailsToSend: Promise<unknown>[] = [];
 
-  emailsToSend.push(
+  emailsAndSmsToSend.push(
     ...calendarEvent.attendees.map((attendee) => {
       return sendEmail(() => new AttendeeDeclinedEmail(calendarEvent, attendee));
     })
   );
+
+  for (const attendee of calEvent.attendees) {
+    const attendeePhoneNumber = attendee.phoneNumber;
+    if (attendeePhoneNumber) {
+      emailsAndSmsToSend.push(
+        sendSMS({ sendTo: attendeePhoneNumber, smsType: "attendeeDeclined", attendee, calEvent })
+      );
+    }
+  }
 
   await Promise.all(emailsToSend);
 };
@@ -289,7 +375,7 @@ export const sendCancelledEmails = async (
     }
   }
 
-  emailsToSend.push(
+  emailsAndSmsToSend.push(
     ...calendarEvent.attendees.map((attendee) => {
       return sendEmail(
         () =>
@@ -312,7 +398,16 @@ export const sendCancelledEmails = async (
     })
   );
 
-  await Promise.all(emailsToSend);
+  for (const attendee of calEvent.attendees) {
+    const attendeePhoneNumber = attendee.phoneNumber;
+    if (attendeePhoneNumber) {
+      emailsAndSmsToSend.push(
+        sendSMS({ sendTo: attendeePhoneNumber, smsType: "eventCancelled", attendee, calEvent })
+      );
+    }
+  }
+
+  await Promise.all(emailsAndSmsToSend);
 };
 
 export const sendOrganizerRequestReminderEmail = async (calEvent: CalendarEvent) => {

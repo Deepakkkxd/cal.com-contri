@@ -419,7 +419,9 @@ export function AvailabilitySettings({
                             <div className="mt-3 flex">
                               <Skeleton
                                 as={Button}
-                                href="/availability/troubleshoot"
+                                href={`/availability/troubleshoot${
+                                  schedule?.id ? `?scheduleId=${schedule.id}` : ""
+                                }`}
                                 color="secondary"
                                 waitForTranslation={!isPlatform}>
                                 {t("launch_troubleshooter")}
@@ -535,7 +537,7 @@ export function AvailabilitySettings({
                     <div className="mt-3 flex">
                       <Skeleton
                         as={Button}
-                        href="/availability/troubleshoot"
+                        href={`/availability/troubleshoot${schedule?.id ? `?scheduleId=${schedule.id}` : ""}`}
                         color="secondary"
                         waitForTranslation={!isPlatform}>
                         {t("launch_troubleshooter")}

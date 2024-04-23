@@ -1,22 +1,27 @@
 import Link from "next/link";
+import { z } from "zod";
 
 import { useLocale } from "@calcom/lib/hooks/useLocale";
+import { useRouterQuery } from "@calcom/lib/hooks/useRouterQuery";
 import { trpc } from "@calcom/trpc/react";
 import { Badge, Label } from "@calcom/ui";
 
-import { useTroubleshooterStore } from "../store";
 import { TroubleshooterListItemHeader } from "./TroubleshooterListItemContainer";
+
+const querySchema = z.object({
+  scheduleId: z.string().optional(),
+});
 
 export function EventScheduleItem() {
   const { t } = useLocale();
-  const selectedEventType = useTroubleshooterStore((state) => state.event);
-
-  const { data: schedule } = trpc.viewer.availability.schedule.getScheduleByEventSlug.useQuery(
+  const routerQuery = useRouterQuery();
+  const scheduleId = Number(querySchema.parse(routerQuery));
+  const { data: schedule } = trpc.viewer.availability.schedule.getScheduleById.useQuery(
     {
-      eventSlug: selectedEventType?.slug as string,
+      id: scheduleId as number,
     },
     {
-      enabled: !!selectedEventType?.slug,
+      enabled: !!scheduleId,
     }
   );
 

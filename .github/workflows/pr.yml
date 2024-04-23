@@ -1,9 +1,8 @@
 name: PR Update
 
 on:
-  pull_request_target:
-    branches:
-      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
   merge_group:
   workflow_dispatch:
 
@@ -12,8 +11,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-if-should-run-jobs:
+    name: Check if should run jobs (target main or core team)
+    runs-on: buildjet-2vcpu-ubuntu-2204
+    steps:
+      - name: Check if should run jobs
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            console.log(steps)
+            console.log("This triggers")
+            console.log(context.payload.number)
+            const targetBranch = context.base_ref;
+            console.log(`targetBranch: ${targetBranch}`);
+            if (targetBranch.includes("main")) {
+              core.setOutput("shouldRunJobs", "true");
+              // exit 0;
+            }
+            const authorTeams = context.actor.teams.map(team => team.slug);
+            if (authorTeams.includes("core")) {
+              core.setOutput("shouldRunJobs", "true");
+              // exit 0;
+            }
   changes:
     name: Detect changes
+    if: ${{ needs.check-if-should-run-jobs.outputs.shouldRunJobs == 'true' }}
     runs-on: buildjet-4vcpu-ubuntu-2204
     permissions:
       pull-requests: read

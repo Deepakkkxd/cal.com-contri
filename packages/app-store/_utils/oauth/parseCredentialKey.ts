@@ -17,15 +17,16 @@ export const minimumTokenResponseSchema = z
     }
   });
 
-export type ParseRefreshTokenResponse<S extends z.ZodTypeAny> =
+export type ParseCredentialKeyRefreshResponse<S extends z.ZodTypeAny> =
   | z.infer<S>
   | z.infer<typeof minimumTokenResponseSchema>;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const parseRefreshTokenResponse = (response: any, schema: z.ZodTypeAny) => {
+const parseCredentialKey = (response: any, schema: z.ZodTypeAny) => {
   let refreshTokenResponse;
-  const credentialSyncingEnabled =
-    APP_CREDENTIAL_SHARING_ENABLED && process.env.CALCOM_CREDENTIAL_SYNC_ENDPOINT;
+  const credentialSyncingEnabled = !!(
+    APP_CREDENTIAL_SHARING_ENABLED && process.env.CALCOM_CREDENTIAL_SYNC_ENDPOINT
+  );
   if (APP_CREDENTIAL_SHARING_ENABLED && process.env.CALCOM_CREDENTIAL_SYNC_ENDPOINT) {
     refreshTokenResponse = minimumTokenResponseSchema.safeParse(response);
   } else {
@@ -40,7 +41,7 @@ const parseRefreshTokenResponse = (response: any, schema: z.ZodTypeAny) => {
     refreshTokenResponse.data.refresh_token = "refresh_token";
   }
 
-  return refreshTokenResponse.data;
+  return refreshTokenResponse;
 };
 
-export default parseRefreshTokenResponse;
+export default parseCredentialKey;
